@@ -1,0 +1,60 @@
+# Data manifest — the marketplace + Luna's installer read this WITHOUT importing
+# the plugin's Python. Keep it in sync with the PluginManifest in __init__.py.
+
+name = "plugin-giphy"
+version = "0.1.0"
+description = "Drop the right GIF into chat at the right moment — GIPHY search + inline reactions."
+entry = "plugin_giphy"
+sdk_version = "0"
+license = "MIT"
+tags = ["giphy", "gif", "fun", "reactions", "chat", "media"]
+readme = """
+# plugin-giphy
+
+Gives the Luna agent a sense of timing — it finds the right GIF on
+[GIPHY](https://giphy.com) and renders it **inline in the chat** at the right
+moment (celebration, facepalm, mind-blown, "let's go", ...).
+
+## Tools
+- `send_gif(query, style="best", rating="pg-13")` — find the best match and show
+  it inline. `style="random"` for variety. One call = GIF in chat.
+- `search_gifs(query, limit=5, rating="pg-13")` — return candidate GIFs to pick
+  from (`title`, `gif_url`, `preview_url`, `giphy_page`).
+- `send_gif_by_url(gif_url, caption=None)` — render one specific GIF inline.
+
+## How it renders
+A tool result's `embed_iframe` is rendered inline by Luna (the same hook
+`plugin-charts` uses). The embed carries a "Powered by GIPHY" mark per GIPHY's
+attribution terms.
+
+## API key
+GIPHY needs a (free) API key. Resolved as: vault `giphy_api_key` -> env
+`LUNA_GIPHY_API_KEY` -> old public beta key (rate-limited/often banned). Get a
+free key at https://developers.giphy.com. If no valid key is set, the tools
+return an actionable "add a key" error rather than failing silently.
+
+Built against `luna_sdk` v0 — no `import luna.*`.
+
+Source: https://github.com/huemorgan/plugin-giphy
+"""
+
+[requires]
+tools = 3
+
+[[tools]]
+name = "send_gif"
+description = "Find the best-matching GIF and show it inline in the chat."
+policy = "auto_approve"
+risk_level = "low"
+
+[[tools]]
+name = "search_gifs"
+description = "Search GIPHY and return candidate GIFs to choose from."
+policy = "auto_approve"
+risk_level = "low"
+
+[[tools]]
+name = "send_gif_by_url"
+description = "Render one specific GIF inline in the chat by its url."
+policy = "auto_approve"
+risk_level = "low"

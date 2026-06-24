@@ -15,6 +15,7 @@ API key resolution (zero-config, overridable):
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -115,7 +116,7 @@ _SEND_GIF_BY_URL_DEF = ToolDef(
 class GiphyPlugin(LunaPlugin):
     manifest = PluginManifest(
         name="plugin-giphy",
-        version="0.1.0",
+        version="0.1.1",
         description=(
             "Drop the right GIF into chat at the right moment — GIPHY search + "
             "inline reactions. Built on luna_sdk v0."
@@ -166,7 +167,13 @@ class GiphyPlugin(LunaPlugin):
                 except Exception:  # noqa: BLE001
                     pass
 
-        async def _send_gif(query: str, style: str = "best", rating: str | None = None) -> dict[str, Any]:
+        # IMPORTANT: tool results MUST be returned as a JSON *string*. The host
+        # stringifies a handler's return with str(), then the chat layer does
+        # json.loads() on it to pull out `embed_iframe` and render it inline. A
+        # raw dict would become a single-quoted Python repr that json.loads
+        # rejects, so the GIF would never display. (Same contract as
+        # plugin-charts.)
+        async def _send_gif(query: str, style: str = "best", rating: str | None = None) -> str:
             key = await self._api_key()
             if style == "random":
                 gif = await giphy.random(query, rating=rating, api_key=key)
@@ -174,8 +181,8 @@ class GiphyPlugin(LunaPlugin):
                 gif = await giphy.translate(query, rating=rating, api_key=key)
             await _emit("giphy.send", {"query": query, "style": style, "error": gif.get("error")})
             if "error" in gif:
-                return gif
-            return {
+                return json.dumps(gif)
+            return json.dumps({
                 "sent": True,
                 "title": gif["title"],
                 "gif_url": gif["gif_url"],
@@ -183,27 +190,27 @@ class GiphyPlugin(LunaPlugin):
                 "embed_iframe": render_gif_embed(
                     gif["gif_url"], title=gif["title"], source_url=gif.get("giphy_page")
                 ),
-            }
+            })
 
-        async def _search_gifs(query: str, limit: int = 5, rating: str | None = None) -> dict[str, Any]:
+        async def _search_gifs(query: str, limit: int = 5, rating: str | None = None) -> str:
             key = await self._api_key()
             out = await giphy.search(query, limit=limit, rating=rating, api_key=key)
             await _emit(
                 "giphy.search",
                 {"query": query, "count": out.get("count", 0), "error": out.get("error")},
             )
-            return out
+            return json.dumps(out)
 
-        async def _send_gif_by_url(gif_url: str, caption: str | None = None) -> dict[str, Any]:
+        async def _send_gif_by_url(gif_url: str, caption: str | None = None) -> str:
             gif_url = (gif_url or "").strip()
             if not gif_url:
-                return {"error": "empty url", "detail": "Provide the GIF media url to show."}
+                return json.dumps({"error": "empty url", "detail": "Provide the GIF media url to show."})
             await _emit("giphy.send_url", {"gif_url": gif_url})
-            return {
+            return json.dumps({
                 "sent": True,
                 "gif_url": gif_url,
                 "embed_iframe": render_gif_embed(gif_url, title=caption, caption=caption),
-            }
+            })
 
         ctx.tool_registry.register(self.manifest.name, _SEND_GIF_DEF, _send_gif)
         ctx.tool_registry.register(self.manifest.name, _SEARCH_GIFS_DEF, _search_gifs)

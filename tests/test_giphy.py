@@ -10,6 +10,7 @@ Run: `pip install -e ".[dev]" && pytest`
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -219,7 +220,7 @@ class TestGiphyClient:
 # ---------------- tool handlers (wiring) ----------------
 @pytest.mark.asyncio
 class TestToolHandlers:
-    async def test_send_gif_returns_embed(self, monkeypatch) -> None:
+    async def test_send_gif_returns_json_string_with_embed(self, monkeypatch) -> None:
         async def fake_translate(query, **kwargs):
             return {
                 "title": "Yay",
@@ -230,7 +231,11 @@ class TestToolHandlers:
         monkeypatch.setattr(giphy_mod, "translate", fake_translate)
         ctx = _FakeContext()
         await GiphyPlugin().on_load(ctx)
-        out = await ctx.tool_registry.tools["send_gif"](query="celebrate")
+        raw = await ctx.tool_registry.tools["send_gif"](query="celebrate")
+        # Contract: handler returns a JSON *string* that json.loads can parse —
+        # this is what lets the host extract embed_iframe and render it inline.
+        assert isinstance(raw, str)
+        out = json.loads(raw)
         assert out["sent"] is True
         assert "embed_iframe" in out
         assert "downsized.gif" in out["embed_iframe"]
@@ -242,21 +247,34 @@ class TestToolHandlers:
         monkeypatch.setattr(giphy_mod, "translate", fake_translate)
         ctx = _FakeContext()
         await GiphyPlugin().on_load(ctx)
-        out = await ctx.tool_registry.tools["send_gif"](query="zzz")
+        out = json.loads(await ctx.tool_registry.tools["send_gif"](query="zzz"))
         assert out["error"] == "no match"
         assert "embed_iframe" not in out
 
     async def test_send_gif_by_url_renders(self) -> None:
         ctx = _FakeContext()
         await GiphyPlugin().on_load(ctx)
-        out = await ctx.tool_registry.tools["send_gif_by_url"](
+        raw = await ctx.tool_registry.tools["send_gif_by_url"](
             gif_url="https://media.giphy.com/y/giphy.gif", caption="us"
         )
+        assert isinstance(raw, str)
+        out = json.loads(raw)
         assert out["sent"] is True
         assert "giphy.gif" in out["embed_iframe"]
 
     async def test_send_gif_by_url_empty(self) -> None:
         ctx = _FakeContext()
         await GiphyPlugin().on_load(ctx)
-        out = await ctx.tool_registry.tools["send_gif_by_url"](gif_url="  ")
+        out = json.loads(await ctx.tool_registry.tools["send_gif_by_url"](gif_url="  "))
         assert out["error"] == "empty url"
+
+    async def test_search_gifs_returns_json_string(self, monkeypatch) -> None:
+        async def fake_search(query, **kwargs):
+            return {"query": query, "count": 1, "results": [{"gif_url": "x"}]}
+
+        monkeypatch.setattr(giphy_mod, "search", fake_search)
+        ctx = _FakeContext()
+        await GiphyPlugin().on_load(ctx)
+        raw = await ctx.tool_registry.tools["search_gifs"](query="cats")
+        assert isinstance(raw, str)
+        assert json.loads(raw)["count"] == 1

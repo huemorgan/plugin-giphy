@@ -1,6 +1,6 @@
 [project]
 name = "plugin-giphy"
-version = "0.1.1"
+version = "0.1.2"
 description = "Drop the right GIF into chat at the right moment — GIPHY search + inline reactions for Luna. Built on luna_sdk v0."
 readme = "README.md"
 license = { text = "MIT" }

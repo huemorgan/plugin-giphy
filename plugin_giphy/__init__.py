@@ -116,7 +116,7 @@ _SEND_GIF_BY_URL_DEF = ToolDef(
 class GiphyPlugin(LunaPlugin):
     manifest = PluginManifest(
         name="plugin-giphy",
-        version="0.1.1",
+        version="0.1.2",
         description=(
             "Drop the right GIF into chat at the right moment — GIPHY search + "
             "inline reactions. Built on luna_sdk v0."

@@ -16,6 +16,7 @@ out of the box; an owner can override it via the vault or env.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -69,8 +70,23 @@ def _shape_gif(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def resolve_base() -> tuple[str, bool]:
+    """Where GIPHY traffic goes. `LUNA_GIPHY_BASE_URL` routes through a cloud
+    gateway/proxy (`{gateway}/proxy/giphy`); when set the plugin sends NO api_key
+    and the gateway injects the real one (query-param auth). Returns
+    `(base, proxied)`. Unset → the real GIPHY API + the caller's key."""
+    base = (os.environ.get("LUNA_GIPHY_BASE_URL") or "").strip()
+    if not base:
+        return API_BASE, False
+    return base.rstrip("/"), True
+
+
 def _params(api_key: str | None, **extra: Any) -> dict[str, Any]:
-    params = {"api_key": (api_key or PUBLIC_BETA_KEY)}
+    # In proxy mode the caller passes api_key=None — omit it entirely so the
+    # gateway can inject the real key. Otherwise send the resolved key.
+    params: dict[str, Any] = {}
+    if api_key:
+        params["api_key"] = api_key
     params.update({k: v for k, v in extra.items() if v is not None})
     return params
 
@@ -87,14 +103,14 @@ def _auth_error() -> dict[str, str]:
 
 
 async def _get(
-    path: str, params: dict[str, Any], *, client: httpx.AsyncClient | None
+    path: str, params: dict[str, Any], *, client: httpx.AsyncClient | None, base: str = API_BASE
 ) -> dict[str, Any] | list[dict[str, Any]] | dict[str, str]:
     owns = client is None
     client = client or httpx.AsyncClient(
         timeout=DEFAULT_TIMEOUT, headers={"User-Agent": USER_AGENT}
     )
     try:
-        resp = await client.get(f"{API_BASE}/{path}", params=params)
+        resp = await client.get(f"{base}/{path}", params=params)
         if resp.status_code in (401, 403):
             return _auth_error()
         if resp.status_code == 429:
@@ -138,10 +154,12 @@ async def translate(
     query = (query or "").strip()
     if not query:
         return {"error": "empty query", "detail": "Provide a phrase to look up."}
+    base, proxied = resolve_base()
     data = await _get(
         "translate",
-        _params(api_key, s=query, rating=_clean_rating(rating), weirdness=0),
+        _params(None if proxied else (api_key or PUBLIC_BETA_KEY), s=query, rating=_clean_rating(rating), weirdness=0),
         client=client,
+        base=base,
     )
     if isinstance(data, dict) and "error" in data:
         return data
@@ -167,10 +185,12 @@ async def search(
     if not query:
         return {"error": "empty query", "detail": "Provide a search query."}
     limit = max(1, min(int(limit or 5), 10))
+    base, proxied = resolve_base()
     data = await _get(
         "search",
-        _params(api_key, q=query, limit=limit, rating=_clean_rating(rating), lang="en"),
+        _params(None if proxied else (api_key or PUBLIC_BETA_KEY), q=query, limit=limit, rating=_clean_rating(rating), lang="en"),
         client=client,
+        base=base,
     )
     if isinstance(data, dict) and "error" in data:
         return data
@@ -190,10 +210,12 @@ async def random(
 ) -> dict[str, Any]:
     """A random GIF for a tag. Returns a shaped gif dict or an error dict."""
     tag = (tag or "").strip()
+    base, proxied = resolve_base()
     data = await _get(
         "random",
-        _params(api_key, tag=tag or None, rating=_clean_rating(rating)),
+        _params(None if proxied else (api_key or PUBLIC_BETA_KEY), tag=tag or None, rating=_clean_rating(rating)),
         client=client,
+        base=base,
     )
     if isinstance(data, dict) and "error" in data:
         return data

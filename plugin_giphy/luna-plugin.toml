@@ -2,7 +2,7 @@
 # the plugin's Python. Keep it in sync with the PluginManifest in __init__.py.
 
 name = "plugin-giphy"
-version = "0.1.2"
+version = "0.2.0"
 description = "Drop the right GIF into chat at the right moment — GIPHY search + inline reactions."
 entry = "plugin_giphy"
 sdk_version = "0"
@@ -32,6 +32,14 @@ GIPHY needs a (free) API key. Resolved as: vault `giphy_api_key` -> env
 `LUNA_GIPHY_API_KEY` -> old public beta key (rate-limited/often banned). Get a
 free key at https://developers.giphy.com. If no valid key is set, the tools
 return an actionable "add a key" error rather than failing silently.
+
+## Cloud key provisioning (gateway proxy)
+Set `LUNA_GIPHY_BASE_URL` to `{gateway}/proxy/giphy` to route through the Luna
+Cloud credential gateway. GIPHY uses query-param auth, so in proxy mode the
+plugin sends NO `api_key` and the gateway injects the real one — the key never
+lands on the tenant machine. Unset = the real GIPHY API + your key. The
+`credential_slots()` advertise this base-url var so the control plane marks
+giphy as proxy-provisionable.
 
 Built against `luna_sdk` v0 — no `import luna.*`.
 

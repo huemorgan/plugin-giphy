@@ -116,6 +116,8 @@ def test_credential_slot_declares_giphy_key() -> None:
     slots = GiphyPlugin().credential_slots()
     assert slots[0].credential_name == "giphy_api_key"
     assert slots[0].env_key_var == "LUNA_GIPHY_API_KEY"
+    # provisionable signal for the cloud control plane
+    assert slots[0].env_base_url_var == "LUNA_GIPHY_BASE_URL"
 
 
 # ---------------- render ----------------
@@ -205,6 +207,33 @@ class TestGiphyClient:
 
         out = await giphy_mod.search("x", client=_client(handler), api_key="k")
         assert out["error"] == "request failed"
+
+    async def test_proxy_base_url_routes_and_drops_key(self, monkeypatch) -> None:
+        monkeypatch.setenv("LUNA_GIPHY_BASE_URL", "https://gw.example/proxy/giphy")
+        seen = {}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            seen["url"] = str(req.url)
+            return httpx.Response(200, json={"data": _gif_payload()})
+
+        out = await giphy_mod.translate("party", client=_client(handler), api_key="real-key")
+        assert out["gif_url"].endswith("downsized.gif")
+        # routed through the gateway, and the plugin sent NO api_key (gateway injects it)
+        assert seen["url"].startswith("https://gw.example/proxy/giphy/translate")
+        assert "api_key" not in seen["url"]
+        assert "real-key" not in seen["url"]
+
+    async def test_no_proxy_sends_key(self, monkeypatch) -> None:
+        monkeypatch.delenv("LUNA_GIPHY_BASE_URL", raising=False)
+        seen = {}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            seen["url"] = str(req.url)
+            return httpx.Response(200, json={"data": _gif_payload()})
+
+        await giphy_mod.translate("party", client=_client(handler), api_key="real-key")
+        assert "api.giphy.com" in seen["url"]
+        assert "api_key=real-key" in seen["url"]
 
     async def test_rating_defaults_to_pg13(self) -> None:
         seen = {}

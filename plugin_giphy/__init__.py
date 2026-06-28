@@ -116,7 +116,7 @@ _SEND_GIF_BY_URL_DEF = ToolDef(
 class GiphyPlugin(LunaPlugin):
     manifest = PluginManifest(
         name="plugin-giphy",
-        version="0.1.2",
+        version="0.2.0",
         description=(
             "Drop the right GIF into chat at the right moment — GIPHY search + "
             "inline reactions. Built on luna_sdk v0."
@@ -133,7 +133,10 @@ class GiphyPlugin(LunaPlugin):
                 slug="giphy",
                 credential_name=VAULT_KEY,
                 env_key_var=ENV_KEY,
-                env_base_url_var=None,
+                # Advertising a base-url var marks giphy proxy-provisionable: the
+                # gateway sets LUNA_GIPHY_BASE_URL and injects the real api_key
+                # (query-param auth), so the plugin sends key-less requests.
+                env_base_url_var="LUNA_GIPHY_BASE_URL",
                 owner=self.manifest.name,
             )
         ]

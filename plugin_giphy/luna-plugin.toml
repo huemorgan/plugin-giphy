@@ -2,7 +2,8 @@
 # the plugin's Python. Keep it in sync with the PluginManifest in __init__.py.
 
 name = "plugin-giphy"
-version = "0.2.1"
+shown_name = "GIPHY"
+version = "0.2.2"
 description = "Drop the right GIF into chat at the right moment — GIPHY search + inline reactions."
 entry = "plugin_giphy"
 sdk_version = "0"

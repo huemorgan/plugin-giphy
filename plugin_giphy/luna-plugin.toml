@@ -3,7 +3,7 @@
 
 name = "plugin-giphy"
 shown_name = "GIPHY"
-version = "0.2.2"
+version = "0.3.0"
 description = "Drop the right GIF into chat at the right moment — GIPHY search + inline reactions."
 entry = "plugin_giphy"
 sdk_version = "0"

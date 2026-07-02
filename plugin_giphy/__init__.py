@@ -15,19 +15,34 @@ API key resolution (zero-config, overridable):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
 
 from luna_sdk import CredentialSlot, LunaPlugin, PluginContext, PluginManifest, ToolDef
 
-from . import giphy
+from . import db, giphy
 from .render import render_gif_embed
 
 log = logging.getLogger("plugin-giphy")
 
 VAULT_KEY = "giphy_api_key"
 ENV_KEY = "LUNA_GIPHY_API_KEY"
+
+# One-time greeting handed to the agent the first time the plugin loads after
+# being installed. `on_install` is not wired in the loader, so we detect "first
+# load after install" with a persisted flag (db.was_install_greeted) instead.
+_INSTALL_GREETING_TITLE = "GIPHY installed"
+_INSTALL_GREETING_NOTE = (
+    "The GIPHY plugin was just installed. You can now drop the perfect GIF into "
+    "chat with the `send_gif` tool.\n\n"
+    "Celebrate the moment: in one short, upbeat line tell the owner GIPHY is "
+    "installed and that you can now react with GIFs, then immediately call "
+    "`send_gif` with a fun celebratory query (e.g. 'celebration party') so an "
+    "actual GIF lands in the chat right now. Keep the text tiny — let the GIF do "
+    "the talking."
+)
 
 _RATING_PROP = {
     "type": "string",
@@ -119,7 +134,7 @@ class GiphyPlugin(LunaPlugin):
         shown_name="GIPHY",
         icon="film",
         image="assets/icon.png",
-        version="0.2.2",
+        version="0.3.0",
         description=(
             "Drop the right GIF into chat at the right moment — GIPHY search + "
             "inline reactions. Built on luna_sdk v0."
@@ -222,3 +237,59 @@ class GiphyPlugin(LunaPlugin):
         ctx.tool_registry.register(self.manifest.name, _SEARCH_GIFS_DEF, _search_gifs)
         ctx.tool_registry.register(self.manifest.name, _SEND_GIF_BY_URL_DEF, _send_gif_by_url)
         log.info("giphy.tools_registered: send_gif, search_gifs, send_gif_by_url")
+
+        await self._init_install_greeting(ctx)
+
+    async def _init_install_greeting(self, ctx: PluginContext) -> None:
+        """Prepare + schedule the one-time post-install greeting.
+
+        No-op when the context has no engine (unit tests / bare contexts). Fully
+        best-effort: table creation or scheduling failures never break load.
+        """
+        engine = getattr(ctx, "engine", None)
+        if engine is None:
+            return
+        try:
+            await db.create_tables(engine)
+        except Exception:  # noqa: BLE001 — a greeting must never break load
+            log.debug("giphy.meta_table_init_failed", exc_info=True)
+            return
+        self._schedule_install_greeting(ctx)
+
+    def _schedule_install_greeting(self, ctx: PluginContext) -> None:
+        """Fire the greeting as a background task so load returns immediately."""
+        async def _run() -> None:
+            try:
+                await self._greet_install_once(ctx)
+            except Exception:  # noqa: BLE001 — greeting is best-effort
+                log.debug("giphy.install_greeting_failed", exc_info=True)
+
+        try:
+            asyncio.get_running_loop().create_task(_run())  # noqa: RUF006
+        except RuntimeError:
+            pass
+
+    async def _greet_install_once(self, ctx: PluginContext) -> bool:
+        """Send the post-install greeting exactly once. Returns True if sent now.
+
+        Idempotent via a persisted flag. The reply turn is allowed the `send_gif`
+        tool so the agent actually drops a GIF in the chat. If no conversation
+        exists yet (the muted helper returns an ``error``), the flag is left unset
+        so the greeting retries on a later load.
+        """
+        send = getattr(ctx, "send_muted_message", None)
+        if send is None:
+            return False
+        engine = getattr(ctx, "engine", None)
+        if engine is None or await db.was_install_greeted(engine):
+            return False
+        result = await send(
+            _INSTALL_GREETING_TITLE,
+            _INSTALL_GREETING_NOTE,
+            respond=True,
+            tools=["send_gif"],
+        )
+        if isinstance(result, dict) and result.get("error"):
+            return False
+        await db.mark_install_greeted(engine)
+        return True

@@ -31,12 +31,17 @@ def _install_luna_sdk_stub() -> None:
         sensitive_args: list = field(default_factory=list)
         skill_gated: bool = False
 
-    @dataclass
     class PluginManifest:
-        name: str
-        version: str
-        description: str = ""
-        tools: list = field(default_factory=list)
+        """Flexible stand-in — accepts any manifest kwargs (shown_name, icon,
+        image, …) so the stub never drifts from the real dataclass."""
+
+        def __init__(self, name: str, version: str, description: str = "",
+                     tools: list | None = None, **extra: Any) -> None:
+            self.name = name
+            self.version = version
+            self.description = description
+            self.tools = tools or []
+            self.__dict__.update(extra)
 
     @dataclass
     class CredentialSlot:
@@ -62,11 +67,22 @@ def _install_luna_sdk_stub() -> None:
         def credential_slots(self) -> list:
             return []
 
+    from sqlalchemy import Uuid
+    from sqlalchemy.orm import DeclarativeBase
+
+    def declarative_base():
+        class Base(DeclarativeBase):
+            pass
+
+        return Base
+
     mod.ToolDef = ToolDef
     mod.PluginManifest = PluginManifest
     mod.CredentialSlot = CredentialSlot
     mod.PluginContext = PluginContext
     mod.LunaPlugin = LunaPlugin
+    mod.declarative_base = declarative_base
+    mod.UUID = Uuid
     sys.modules["luna_sdk"] = mod
 
 

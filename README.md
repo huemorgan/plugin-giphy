@@ -13,6 +13,13 @@ the Luna marketplace and runs without being part of Luna core.
 
 In Luna: **Marketplace → Luna Official → plugin-giphy → Install**.
 
+The first time it loads after install, it hands the agent a **muted message**
+(008.994) — a collapsible `▸ GIPHY installed` line — that prompts the agent to
+say hi and immediately drop a celebratory GIF in the chat via `send_gif`. It
+fires **once** (tracked by a persisted flag in the plugin's own table), is
+best-effort (never blocks or fails load), and retries on a later boot if no
+conversation exists yet.
+
 ## What it does
 
 | Tool | What it does |
